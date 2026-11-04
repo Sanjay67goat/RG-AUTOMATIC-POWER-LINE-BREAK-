@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GridGuard - Combined 3D & 2D Power Line Hazard Command Center</title>
+    <!-- Three.js for 3D Graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #080c14; color: #f3f4f6; overflow-x: hidden; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        #canvas-container { width: 100%; height: 500px; position: relative; border-radius: 12px; overflow: hidden; }
+        .glass-panel { background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .btn-action { transition: all 0.2s ease; }
+        .btn-action:hover { transform: translateY(-1px); }
+        .btn-action:active { transform: translateY(1px); }
+        .tab-btn.active { background-color: #3b82f6; color: #ffffff; border-color: #60a5fa; }
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen pb-12">
+
+    <!-- Header / Navbar -->
+    <header class="border-b border-slate-800 bg-slate-900/90 sticky top-0 z-50 backdrop-blur-md">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400">
+                    <i data-lucide="zap" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-extrabold tracking-tight bg-gradient-to-r from-amber-400 via-orange-400 to-red-500 bg-clip-text text-transparent">
+                        GridGuard Command Center
+                    </h1>
+                    <p class="text-xs text-slate-400">Autonomous Power Line Break & Hazard Suppression Engine</p>
+                </div>
+            </div>
+
+            <!-- View Switcher Tabs -->
+            <div class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <button id="tab-3d-btn" onclick="switchView('3d')" class="tab-btn active px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2">
+                    <i data-lucide="box" class="w-4 h-4"></i> 3D Physics View
+                </button>
+                <button id="tab-2d-btn" onclick="switchView('2d')" class="tab-btn px-4 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-2 text-slate-400 hover:text-white">
+                    <i data-lucide="layout-dashboard" class="w-4 h-4"></i> 2D Topology Dashboard
+                </button>
+            </div>
+
+            <!-- Right Controls: Status & Audio -->
+            <div class="flex items-center gap-3">
+                <div id="status-badge" class="px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="status-text">SYSTEM ENERGIZED - NORMAL</span>
+                </div>
+
+                <button id="bgm-btn" onclick="toggleBGM()" class="btn-action flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-semibold text-slate-300">
+                    <i data-lucide="music" class="w-4 h-4 text-amber-400"></i>
+                    <span id="bgm-text">Audio BGM: OFF</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Column: Primary Visualizer (8 cols) -->
+        <div class="lg:col-span-8 space-y-6">
+
+            <!-- VIEW 1: 3D THREE.JS CANVAS CONTAINER -->
+            <div id="view-3d" class="glass-panel p-2 rounded-2xl relative shadow-2xl">
+                <div id="canvas-container">
+                    <!-- Overlay Camera Presets -->
+                    <div class="absolute top-4 left-4 z-10 flex flex-wrap gap-2">
+                        <button onclick="setCameraView('overview')" class="px-2.5 py-1 bg-slate-900/80 hover:bg-slate-800 border border-slate-700 rounded-md text-xs font-medium text-slate-300 backdrop-blur">Overview</button>
+                        <button onclick="setCameraView('pole')" class="px-2.5 py-1 bg-slate-900/80 hover:bg-slate-800 border border-slate-700 rounded-md text-xs font-medium text-slate-300 backdrop-blur">Pole #204</button>
+                        <button onclick="setCameraView('transformer')" class="px-2.5 py-1 bg-slate-900/80 hover:bg-slate-800 border border-slate-700 rounded-md text-xs font-medium text-slate-300 backdrop-blur">Substation</button>
+                    </div>
+
+                    <!-- Weather Rain Controls Overlay -->
+                    <div class="absolute top-4 right-4 z-10 bg-slate-900/90 border border-slate-700/80 rounded-xl p-3 backdrop-blur shadow-lg flex items-center gap-3">
+                        <i data-lucide="cloud-rain" class="w-5 h-5 text-blue-400"></i>
+                        <div class="space-y-1">
+                            <div class="flex items-center justify-between text-xs gap-4">
+                                <span class="text-slate-300 font-medium">Rainfall Moisture</span>
+                                <span id="rain-val" class="font-mono text-blue-400">0%</span>
+                            </div>
+                            <input type="range" id="rain-slider" min="0" max="100" value="0" oninput="updateRain(this.value)" class="w-28 accent-blue-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+                        </div>
+                    </div>
+
+                    <!-- Breaker Status Floating Badge -->
+                    <div id="breaker-indicator" class="absolute bottom-4 left-4 z-10 px-4 py-2 bg-emerald-950/90 border border-emerald-500/40 rounded-xl flex items-center gap-3 backdrop-blur">
+                        <i data-lucide="shield-check" class="w-5 h-5 text-emerald-400"></i>
+                        <div>
+                            <div class="text-[10px] uppercase tracking-wider text-slate-400">Automatic Safety Breaker</div>
+                            <div id="breaker-text" class="text-xs font-mono font-bold text-emerald-400">CLOSED (Energized)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 2: 2D SVG TOPOLOGY MAP & TELEMETRY -->
+            <div id="view-2d" class="glass-panel p-5 rounded-2xl space-y-4 hidden">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                        <i data-lucide="network" class="w-4 h-4 text-cyan-400"></i> 2D Transmission Grid Network Topology
+                    </h2>
+                    <span class="text-xs text-slate-400 font-mono">Substation Sector 7 Monitor</span>
+                </div>
+
+                <!-- SVG Topology Graphic -->
+                <div class="bg-slate-950 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
+                    <svg viewBox="0 0 700 220" class="w-full h-auto">
+                        <!-- Connecting Wires -->
+                        <line id="svg-wire-1" x1="100" y1="110" x2="300" y2="110" stroke="#38bdf8" stroke-width="4" stroke-dasharray="8 4"/>
+                        <line id="svg-wire-2" x1="300" y1="110" x2="500" y2="110" stroke="#38bdf8" stroke-width="4" stroke-dasharray="8 4"/>
+                        <line id="svg-wire-3" x1="500" y1="110" x2="620" y2="110" stroke="#38bdf8" stroke-width="4" stroke-dasharray="8 4"/>
+
+                        <!-- Substation Main Node -->
+                        <rect x="40" y="70" width="80" height="80" rx="8" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+                        <text x="80" y="115" text-anchor="middle" fill="#f8fafc" font-size="11" font-weight="bold">SUBSTATION</text>
+                        <text x="80" y="130" text-anchor="middle" fill="#38bdf8" font-size="9" font-mono="true">11.0 kV</text>
+
+                        <!-- Pole #203 Node -->
+                        <circle cx="300" cy="110" r="24" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+                        <text x="300" y="114" text-anchor="middle" fill="#f8fafc" font-size="10" font-weight="bold">POLE #203</text>
+
+                        <!-- Pole #204 Critical Node -->
+                        <circle id="svg-node-204" cx="500" cy="110" r="28" fill="#0f172a" stroke="#10b981" stroke-width="3"/>
+                        <text x="500" y="114" text-anchor="middle" fill="#f8fafc" font-size="10" font-weight="bold">POLE #204</text>
+                        <text x="500" y="128" text-anchor="middle" fill="#10b981" font-size="9" font-mono="true" id="svg-204-status">NORMAL</text>
+
+                        <!-- Residential Load Node -->
+                        <rect x="600" y="80" width="60" height="60" rx="8" fill="#0f172a" stroke="#64748b" stroke-width="2"/>
+                        <text x="630" y="115" text-anchor="middle" fill="#94a3b8" font-size="10">LOAD</text>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Universal Simulator Triggers -->
+            <div class="glass-panel p-5 rounded-2xl space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                        <i data-lucide="sliders" class="w-4 h-4 text-amber-400"></i> Hazard Simulator Controls
+                    </h2>
+                    <button onclick="resetSystem()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition">
+                        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Reset System & Stop Sirens
+                    </button>
+                </div>
+
+                <!-- Simulation Action Buttons -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <button onclick="triggerFault('wire_break')" class="btn-action p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl text-left group">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs font-bold text-red-400">Wire Snap / Cut</span>
+                            <i data-lucide="scissors" class="w-4 h-4 text-red-400 group-hover:scale-110 transition"></i>
+                        </div>
+                        <p class="text-[11px] text-slate-400">Simulate physical wire break & instant 12ms breaker trip.</p>
+                    </button>
+
+                    <button onclick="triggerFault('overload')" class="btn-action p-3 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl text-left group">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs font-bold text-amber-400">Current Overload Surge</span>
+                            <i data-lucide="flame" class="w-4 h-4 text-amber-400 group-hover:scale-110 transition"></i>
+                        </div>
+                        <p class="text-[11px] text-slate-400">Simulate arc flash spark discharge & thermal surge disconnect.</p>
+                    </button>
+
+                    <button onclick="triggerFault('rain_trip')" class="btn-action p-3 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 rounded-xl text-left group">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-xs font-bold text-blue-400">Heavy Rain Trip</span>
+                            <i data-lucide="cloud-lightning" class="w-4 h-4 text-blue-400 group-hover:scale-110 transition"></i>
+                        </div>
+                        <p class="text-[11px] text-slate-400">Trigger wet-insulator ground leakage trip (>75% moisture).</p>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Column: GPS Location & Telemetry (4 cols) -->
+        <div class="lg:col-span-4 space-y-6">
+
+            <!-- Incident Location Console -->
+            <div class="glass-panel p-5 rounded-2xl space-y-4">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2 border-b border-slate-800 pb-3">
+                    <i data-lucide="map-pin" class="w-4 h-4 text-red-400"></i> Incident GPS Location
+                </h2>
+
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 space-y-3">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="text-[10px] text-slate-400 font-mono uppercase">Fault Zone ID</span>
+                            <div class="text-sm font-bold text-slate-200">Sector 7 - Pole #204</div>
+                        </div>
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">Chennai Substation</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/80 font-mono text-xs">
+                        <div>
+                            <span class="text-[10px] text-slate-500 block">LATITUDE</span>
+                            <span class="text-slate-300">13.0827° N</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-500 block">LONGITUDE</span>
+                            <span class="text-slate-300">80.2707° E</span>
+                        </div>
+                    </div>
+
+                    <!-- Radar Map Visual Box -->
+                    <div class="h-28 bg-slate-950 border border-slate-800 rounded-lg relative overflow-hidden flex items-center justify-center">
+                        <div class="absolute inset-0 opacity-20 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:12px_12px]"></div>
+                        <div id="map-radar" class="w-12 h-12 rounded-full border border-amber-500/50 bg-amber-500/10 flex items-center justify-center relative">
+                            <div class="w-2.5 h-2.5 rounded-full bg-amber-400"></div>
+                        </div>
+                        <span id="map-label" class="absolute bottom-2 left-2 text-[10px] font-mono text-slate-400 bg-slate-900/90 px-1.5 py-0.5 rounded border border-slate-800">GPS Active</span>
+                    </div>
+                </div>
+
+                <!-- Live Metrics Grid -->
+                <div class="grid grid-cols-2 gap-3 text-xs">
+                    <div class="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                        <span class="text-slate-400 block mb-0.5 text-[10px]">GRID VOLTAGE</span>
+                        <span id="tele-voltage" class="font-mono font-bold text-base text-emerald-400">11.0 kV</span>
+                    </div>
+                    <div class="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
+                        <span class="text-slate-400 block mb-0.5 text-[10px]">LINE CURRENT</span>
+                        <span id="tele-current" class="font-mono font-bold text-base text-slate-200">142 A</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Emergency Alert Messaging Log -->
+            <div class="glass-panel p-5 rounded-2xl space-y-3">
+                <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2 border-b border-slate-800 pb-3">
+                    <i data-lucide="send" class="w-4 h-4 text-emerald-400"></i> SMS & Dispatch Alerts
+                </h2>
+
+                <div id="alert-log" class="h-44 overflow-y-auto space-y-2 font-mono text-xs pr-1">
+                    <div class="p-2 rounded bg-slate-900/80 border border-slate-800 text-slate-400">
+                        <span class="text-slate-500">[System Start]</span> Autonomous alert dispatcher online.
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- App Logic & 3D Three.js Script -->
+    <script>
+        // --- System State ---
+        const state = {
+            isEnergized: true,
+            isTripped: false,
+            voltage: 11.0,
+            current: 142,
+            rainLevel: 0,
+            bgmActive: false
+        };
+
+        // --- Web Audio API Engine ---
+        let audioCtx = null;
+        let bgmOsc = null;
+        let sirenOsc = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function toggleBGM() {
+            initAudio();
+            state.bgmActive = !state.bgmActive;
+            const btnText = document.getElementById('bgm-text');
+            if (state.bgmActive) {
+                btnText.innerText = "Audio BGM: ON";
+                startBGM();
+            } else {
+                btnText.innerText = "Audio BGM: OFF";
+                stopBGM();
+            }
+        }
+
+        function startBGM() {
+            if (!audioCtx || !state.bgmActive || bgmOsc) return;
+            bgmOsc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            bgmOsc.type = 'sine';
+            bgmOsc.frequency.setValueAtTime(110, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+            bgmOsc.connect(gain);
+            gain.connect(audioCtx.destination);
+            bgmOsc.start();
+        }
+
+        function stopBGM() {
+            if (bgmOsc) {
+                bgmOsc.stop();
+                bgmOsc.disconnect();
+                bgmOsc = null;
+            }
+        }
+
+        function startSiren() {
+            initAudio();
+            if (sirenOsc) return;
+
+            sirenOsc = audioCtx.createOscillator();
+            const sirenGain = audioCtx.createGain();
+            sirenOsc.type = 'sawtooth';
+            
+            const now = audioCtx.currentTime;
+            sirenOsc.frequency.setValueAtTime(440, now);
+            sirenOsc.frequency.linearRampToValueAtTime(880, now + 0.5);
+            
+            sirenGain.gain.setValueAtTime(0.08, now);
+            sirenOsc.connect(sirenGain);
+            sirenGain.connect(audioCtx.destination);
+            sirenOsc.start();
+
+            sirenOsc.timer = setInterval(() => {
+                if (sirenOsc && audioCtx) {
+                    const t = audioCtx.currentTime;
+                    sirenOsc.frequency.cancelScheduledValues(t);
+                    sirenOsc.frequency.setValueAtTime(440, t);
+                    sirenOsc.frequency.linearRampToValueAtTime(880, t + 0.4);
+                }
+            }, 500);
+        }
+
+        function stopSiren() {
+            if (sirenOsc) {
+                if (sirenOsc.timer) clearInterval(sirenOsc.timer);
+                try {
+                    sirenOsc.stop();
+                    sirenOsc.disconnect();
+                } catch(e) {}
+                sirenOsc = null;
+            }
+        }
+
+        function playSparkSound() {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(120 + Math.random() * 600, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.15);
+        }
+
+        // --- View Switcher ---
+        function switchView(view) {
+            const view3d = document.getElementById('view-3d');
+            const view2d = document.getElementById('view-2d');
+            const btn3d = document.getElementById('tab-3d-btn');
+            const btn2d = document.getElementById('tab-2d-btn');
+
+            if (view === '3d') {
+                view3d.classList.remove('hidden');
+                view2d.classList.add('hidden');
+                btn3d.classList.add('active');
+                btn2d.classList.remove('active');
+            } else {
+                view3d.classList.add('hidden');
+                view2d.classList.remove('hidden');
+                btn2d.classList.add('active');
+                btn3d.classList.remove('active');
+            }
+        }
+
+        // --- 3D Scene Setup (Three.js) ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x080c14);
+        scene.fog = new THREE.FogExp2(0x080c14, 0.02);
+
+        const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.set(0, 8, 22);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05;
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(15, 25, 10);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // Ground Mesh
+        const groundGeo = new THREE.PlaneGeometry(80, 80);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.8 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Grid Lines
+        const gridHelper = new THREE.GridHelper(80, 40, 0x334155, 0x1e293b);
+        gridHelper.position.y = 0.01;
+        scene.add(gridHelper);
+
+        // Poles & Wires
+        function createPole(x, z) {
+            const group = new THREE.Group();
+            const poleGeo = new THREE.CylinderGeometry(0.25, 0.35, 10, 12);
+            const poleMat = new THREE.MeshStandardMaterial({ color: 0x475569 });
+            const pole = new THREE.Mesh(poleGeo, poleMat);
+            pole.position.y = 5;
+            pole.castShadow = true;
+            group.add(pole);
+
+            const armGeo = new THREE.BoxGeometry(3.5, 0.2, 0.2);
+            const armMat = new THREE.MeshStandardMaterial({ color: 0x64748b });
+            const arm = new THREE.Mesh(armGeo, armMat);
+            arm.position.set(0, 9, 0);
+            group.add(arm);
+
+            [-1.5, 0, 1.5].forEach(offsetX => {
+                const insGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.4, 8);
+                const insMat = new THREE.MeshStandardMaterial({ color: 0xf8fafc });
+                const ins = new THREE.Mesh(insGeo, insMat);
+                ins.position.set(offsetX, 9.3, 0);
+                group.add(ins);
+            });
+
+            group.position.set(x, 0, z);
+            scene.add(group);
+            return group;
+        }
+
+        createPole(-12, 0);
+        createPole(12, 0);
+
+        let wires = [];
+        const wireMaterialNormal = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+        const wireMaterialFault = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+
+        function buildWires(broken = false) {
+            wires.forEach(w => scene.remove(w));
+            wires = [];
+            const wireOffsets = [-1.5, 0, 1.5];
+
+            wireOffsets.forEach((offsetX) => {
+                if (!broken) {
+                    const curve = new THREE.CatmullRomCurve3([
+                        new THREE.Vector3(-12 + offsetX, 9.3, 0),
+                        new THREE.Vector3(0 + offsetX, 8.2, 0),
+                        new THREE.Vector3(12 + offsetX, 9.3, 0)
+                    ]);
+                    const tubeGeo = new THREE.TubeGeometry(curve, 32, 0.04, 6, false);
+                    const wireMesh = new THREE.Mesh(tubeGeo, state.isEnergized ? wireMaterialNormal : wireMaterialFault);
+                    scene.add(wireMesh);
+                    wires.push(wireMesh);
+                } else {
+                    // Left Severed Cable
+                    const curveLeft = new THREE.CatmullRomCurve3([
+                        new THREE.Vector3(-12 + offsetX, 9.3, 0),
+                        new THREE.Vector3(-4 + offsetX, 5.0, 0),
+                        new THREE.Vector3(-1 + offsetX, 0.2, 0.5)
+                    ]);
+                    const tubeLeft = new THREE.Mesh(new THREE.TubeGeometry(curveLeft, 24, 0.04, 6, false), wireMaterialFault);
+
+                    // Right Severed Cable
+                    const curveRight = new THREE.CatmullRomCurve3([
+                        new THREE.Vector3(12 + offsetX, 9.3, 0),
+                        new THREE.Vector3(5 + offsetX, 4.5, 0),
+                        new THREE.Vector3(1 + offsetX, 0.2, -0.5)
+                    ]);
+                    const tubeRight = new THREE.Mesh(new THREE.TubeGeometry(curveRight, 24, 0.04, 6, false), wireMaterialFault);
+
+                    scene.add(tubeLeft);
+                    scene.add(tubeRight);
+                    wires.push(tubeLeft, tubeRight);
+                }
+            });
+        }
+
+        buildWires(false);
+
+        // Rain & Spark Particles
+        const rainCount = 1000;
+        const rainGeo = new THREE.BufferGeometry();
+        const rainPos = new Float32Array(rainCount * 3);
+        for (let i = 0; i < rainCount * 3; i += 3) {
+            rainPos[i] = (Math.random() - 0.5) * 50;
+            rainPos[i + 1] = Math.random() * 25;
+            rainPos[i + 2] = (Math.random() - 0.5) * 30;
+        }
+        rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+        const rainMat = new THREE.PointsMaterial({ color: 0x38bdf8, size: 0.1, transparent: true, opacity: 0 });
+        const rainParticles = new THREE.Points(rainGeo, rainMat);
+        scene.add(rainParticles);
+
+        const sparkCount = 30;
+        const sparkGeo = new THREE.BufferGeometry();
+        const sparkPos = new Float32Array(sparkCount * 3);
+        sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
+        const sparkMat = new THREE.PointsMaterial({ color: 0xf59e0b, size: 0.2, transparent: true, opacity: 0 });
+        const sparkParticles = new THREE.Points(sparkGeo, sparkMat);
+        scene.add(sparkParticles);
+
+        function emitSparks() {
+            sparkMat.opacity = 1.0;
+            const positions = sparkParticles.geometry.attributes.position.array;
+            for (let i = 0; i < sparkCount * 3; i += 3) {
+                positions[i] = (Math.random() - 0.5) * 3;
+                positions[i + 1] = 8.5 + (Math.random() - 0.5) * 2;
+                positions[i + 2] = (Math.random() - 0.5) * 3;
+            }
+            sparkParticles.geometry.attributes.position.needsUpdate = true;
+            playSparkSound();
+        }
+
+        function updateRain(val) {
+            state.rainLevel = parseInt(val);
+            document.getElementById('rain-val').innerText = val + '%';
+            rainMat.opacity = state.rainLevel / 100 * 0.7;
+
+            if (state.rainLevel >= 75 && !state.isTripped) {
+                triggerFault('rain_trip');
+            }
+        }
+
+        // --- Fault Triggers ---
+        function triggerFault(type) {
+            initAudio();
+            state.isEnergized = false;
+            state.isTripped = true;
+
+            const badge = document.getElementById('status-badge');
+            const statusText = document.getElementById('status-text');
+            const breakerInd = document.getElementById('breaker-indicator');
+            const breakerText = document.getElementById('breaker-text');
+
+            badge.className = "px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 bg-red-500/10 border border-red-500/30 text-red-400";
+            breakerInd.className = "absolute bottom-4 left-4 z-10 px-4 py-2 bg-red-950/90 border border-red-500/40 rounded-xl flex items-center gap-3 backdrop-blur";
+            breakerText.innerText = "TRIPPED (De-energized)";
+            breakerText.className = "text-xs font-mono font-bold text-red-400";
+
+            document.getElementById('tele-voltage').innerText = "0.0 kV";
+            document.getElementById('tele-voltage').className = "font-mono font-bold text-base text-red-400";
+
+            // SVG 2D Topology Alert
+            const svgNode = document.getElementById('svg-node-204');
+            const svgStatus = document.getElementById('svg-204-status');
+            if (svgNode) svgNode.setAttribute('stroke', '#ef4444');
+            if (svgStatus) { svgStatus.textContent = 'TRIPPED'; svgStatus.setAttribute('fill', '#ef4444'); }
+
+            document.getElementById('map-radar').className = "w-12 h-12 rounded-full border border-red-500/80 bg-red-500/30 flex items-center justify-center relative animate-ping";
+
+            startSiren();
+
+            if (type === 'wire_break') {
+                statusText.innerText = "ALERT: SEVERED POWER LINE DETECTED";
+                document.getElementById('tele-current').innerText = "0 A";
+                buildWires(true);
+                emitSparks();
+                logAlert("CRITICAL", "Line Severed at Pole #204. Automated safety breaker tripped in 12ms.");
+                logAlert("SMS", "Auto-Sent Emergency SMS to Fire Department & Grid Engineers.");
+            } else if (type === 'overload') {
+                statusText.innerText = "ALERT: HIGH-CURRENT ARC FAULT SURGE";
+                document.getElementById('tele-current').innerText = "580 A (SURGE)";
+                buildWires(false);
+                emitSparks();
+                logAlert("CRITICAL", "High-Current Thermal Surge! Circuit de-energized to prevent wildfire hazard.");
+            } else if (type === 'rain_trip') {
+                statusText.innerText = "ALERT: HEAVY RAIN GROUND LEAKAGE TRIP";
+                document.getElementById('tele-current').innerText = "0 A";
+                buildWires(false);
+                logAlert("WARNING", "Rainfall > 75%. Ground leakage detected on wet insulators. Auto-tripped line.");
+            }
+        }
+
+        // --- System Reset & Stop Sirens ---
+        function resetSystem() {
+            state.isEnergized = true;
+            state.isTripped = false;
+            state.voltage = 11.0;
+            state.current = 142;
+
+            stopSiren();
+
+            const badge = document.getElementById('status-badge');
+            const statusText = document.getElementById('status-text');
+            const breakerInd = document.getElementById('breaker-indicator');
+            const breakerText = document.getElementById('breaker-text');
+
+            badge.className = "px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400";
+            statusText.innerText = "SYSTEM ENERGIZED - NORMAL";
+
+            breakerInd.className = "absolute bottom-4 left-4 z-10 px-4 py-2 bg-emerald-950/90 border border-emerald-500/40 rounded-xl flex items-center gap-3 backdrop-blur";
+            breakerText.innerText = "CLOSED (Energized)";
+            breakerText.className = "text-xs font-mono font-bold text-emerald-400";
+
+            document.getElementById('tele-voltage').innerText = "11.0 kV";
+            document.getElementById('tele-voltage').className = "font-mono font-bold text-base text-emerald-400";
+            document.getElementById('tele-current').innerText = "142 A";
+
+            const svgNode = document.getElementById('svg-node-204');
+            const svgStatus = document.getElementById('svg-204-status');
+            if (svgNode) svgNode.setAttribute('stroke', '#10b981');
+            if (svgStatus) { svgStatus.textContent = 'NORMAL'; svgStatus.setAttribute('fill', '#10b981'); }
+
+            document.getElementById('map-radar').className = "w-12 h-12 rounded-full border border-amber-500/50 bg-amber-500/10 flex items-center justify-center relative";
+
+            buildWires(false);
+            sparkMat.opacity = 0;
+
+            logAlert("INFO", "System Reset performed. Power re-energized for Sector 7.");
+        }
+
+        function logAlert(tag, msg) {
+            const logBox = document.getElementById('alert-log');
+            const time = new Date().toLocaleTimeString();
+            let tagColor = "bg-blue-500/10 text-blue-400 border-blue-500/30";
+            if (tag === 'CRITICAL') tagColor = "bg-red-500/20 text-red-400 border-red-500/40";
+            if (tag === 'WARNING') tagColor = "bg-amber-500/20 text-amber-400 border-amber-500/40";
+            if (tag === 'SMS') tagColor = "bg-emerald-500/20 text-emerald-400 border-emerald-500/40";
+
+            const entry = document.createElement('div');
+            entry.className = "p-2 rounded bg-slate-900 border border-slate-800 space-y-1 text-xs";
+            entry.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <span class="px-1.5 py-0.5 rounded text-[9px] font-bold border ${tagColor}">${tag}</span>
+                    <span class="text-[10px] text-slate-500">${time}</span>
+                </div>
+                <p class="text-slate-300 leading-tight">${msg}</p>
+            `;
+            logBox.prepend(entry);
+        }
+
+        function setCameraView(view) {
+            if (view === 'overview') {
+                camera.position.set(0, 8, 22);
+                controls.target.set(0, 4, 0);
+            } else if (view === 'pole') {
+                camera.position.set(16, 11, 8);
+                controls.target.set(12, 8, 0);
+            } else if (view === 'transformer') {
+                camera.position.set(-8, 6, 6);
+                controls.target.set(-12, 4, 0);
+            }
+            controls.update();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (state.rainLevel > 0) {
+                const positions = rainParticles.geometry.attributes.position.array;
+                for (let i = 1; i < rainCount * 3; i += 3) {
+                    positions[i] -= 0.6;
+                    if (positions[i] < 0) positions[i] = 25;
+                }
+                rainParticles.geometry.attributes.position.needsUpdate = true;
+            }
+
+            if (sparkMat.opacity > 0) {
+                sparkMat.opacity -= 0.02;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        lucide.createIcons();
+    </script>
+</body>
+</html>
